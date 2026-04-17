@@ -3,7 +3,7 @@ targetScope = 'resourceGroup'
 param location string = 'eastus'
 param adminUsername string = 'azladmin'
 param vmName string = 'jesse-ama-test'
-param vmSize string = 'Standard_D2ads_v5'
+param vmSize string = 'Standard_D4ads_v5'
 param sshPublicKey string
 
 // ── Monitor workspace ──────────────────────────────────────────────────────
@@ -49,21 +49,44 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2024-03-11' = {
                   }
                 ]
               }
-              // Slurm metrics via prometheus-slurm-exporter (compatible with
-              // Slurm 21.x+). Exposes jobs/nodes/partitions/scheduler at a
-              // single /metrics endpoint on :9341.
-              // Note: MetricsType=metrics/openmetrics requires Slurm >= 22.05;
-              // use this sidecar exporter for distros that ship 21.x (Ubuntu 22.04).
+              // Slurm native openmetrics plugin (MetricsType=metrics/openmetrics,
+              // introduced in Slurm 25.11). slurmctld serves 5 sub-endpoints on
+              // its RPC port (6817). 60s interval per SchedMD guidance (shorter
+              // intervals cause slurmctld lock contention).
               {
-                job_name: 'slurm'
-                scrape_interval: '30s'
-                metrics_path: '/metrics'
+                job_name: 'slurm-jobs'
+                scrape_interval: '60s'
+                metrics_path: '/metrics/jobs'
                 scheme: 'http'
-                static_configs: [
-                  {
-                    targets: ['127.0.0.1:9092']
-                  }
-                ]
+                static_configs: [{ targets: ['127.0.0.1:6817'] }]
+              }
+              {
+                job_name: 'slurm-jobs-users-accts'
+                scrape_interval: '60s'
+                metrics_path: '/metrics/jobs-users-accts'
+                scheme: 'http'
+                static_configs: [{ targets: ['127.0.0.1:6817'] }]
+              }
+              {
+                job_name: 'slurm-nodes'
+                scrape_interval: '60s'
+                metrics_path: '/metrics/nodes'
+                scheme: 'http'
+                static_configs: [{ targets: ['127.0.0.1:6817'] }]
+              }
+              {
+                job_name: 'slurm-partitions'
+                scrape_interval: '60s'
+                metrics_path: '/metrics/partitions'
+                scheme: 'http'
+                static_configs: [{ targets: ['127.0.0.1:6817'] }]
+              }
+              {
+                job_name: 'slurm-scheduler'
+                scrape_interval: '60s'
+                metrics_path: '/metrics/scheduler'
+                scheme: 'http'
+                static_configs: [{ targets: ['127.0.0.1:6817'] }]
               }
             ]
           }
@@ -195,8 +218,8 @@ resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
-        offer: '0001-com-ubuntu-server-jammy'
-        sku: '22_04-lts-gen2'
+        offer: 'ubuntu-24_04-lts'
+        sku: 'server'
         version: 'latest'
       }
       osDisk: {
