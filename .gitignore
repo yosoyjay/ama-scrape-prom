@@ -1,0 +1,9 @@
+# ARM compiled output
+deploy/main.json
+
+# Local parameter files with secrets
+*.parameters.json
+*.env
+
+# macOS
+.DS_Store

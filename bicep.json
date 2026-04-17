@@ -1,0 +1,122 @@
+param location string = 'swedencentral'
+param adminUsername string = 'azladmin'
+param vmName string = 'vanilla01'
+param vmSize string = 'Standard_D2as_v6'
+param vmSubnetId string = '/subscriptions/62118f5c-be37-400f-9f20-a8b77a2a7877/resourceGroups/sweden-core-rg/providers/Microsoft.Network/virtualNetworks/sweden-vnet/subnets/ComputeSubnet'
+resource nic 'Microsoft.Network/networkInterfaces@2023-09-01' = {
+  name: '${vmName}-nic'
+  location: location
+  properties: {
+    enableAcceleratedNetworking: true
+    ipConfigurations: [
+      {
+        name: 'ipconfig'
+        properties: {
+          privateIPAllocationMethod: 'Dynamic'
+          privateIPAddressVersion: 'IPv4'
+          subnet: {
+            id: vmSubnetId
+          }
+        }
+      }
+    ]
+  }
+}
+resource vm 'Microsoft.Compute/virtualMachines@2023-09-01' = {
+  name: vmName
+  location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
+  // plan: {
+  //   publisher: 'azure-hpc'
+  //   product: 'azurelinux-hpc'
+  //   name: '3'
+  // }
+  properties: {
+    osProfile: {
+      computerName: vmName
+      adminUsername: adminUsername
+      linuxConfiguration: {
+        disablePasswordAuthentication: true
+        patchSettings: {
+          patchMode: 'ImageDefault'
+        }
+        ssh: {
+          publicKeys: [
+            {
+              path: '/home/${adminUsername}/.ssh/authorized_keys'
+              keyData: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDwxy0IhN4xtE5pRqKvtaImuo14FVTdFpALHZucgwa2d trevor.cooper-chadwick@tst1-login-0'
+            }
+          ]
+        }
+      }
+    }
+    hardwareProfile: {
+      vmSize: vmSize
+    }
+    securityProfile: {
+      securityType: 'TrustedLaunch'
+      uefiSettings: {
+        secureBootEnabled: true
+        vTpmEnabled: true
+      }
+    }
+    storageProfile: {
+      imageReference: {
+        // sharedGalleryImageId: '/Microsoft.Compute/galleries/gallery/images/azl3/versions/17.0.0'
+        id: '/subscriptions/62118f5c-be37-400f-9f20-a8b77a2a7877/resourceGroups/trevs-rg/providers/Microsoft.Compute/galleries/gallery/images/azl3controller/versions/latest'
+        // MicrosoftCBLMariner:cbl-mariner:cbl-mariner-2-gen2:latest
+        // MicrosoftCBLMariner:azure-linux-3:azure-linux-3:latest
+        // azure-hpc:azurelinux-hpc:3:3.0.2025092901
+        // publisher: 'azure-hpc'
+        // offer: 'azurelinux-hpc'
+        // sku: '3'
+        // version: '3.0.2026032601'
+      }
+      osDisk: {
+        name: '${vmName}-os'
+        createOption: 'FromImage'
+        managedDisk: {
+          storageAccountType: 'StandardSSD_LRS'
+        }
+        deleteOption: 'Delete'
+      }
+    }
+    networkProfile: {
+      networkInterfaces: [
+        {
+          id: nic.id
+          properties: {
+            deleteOption: 'Delete'
+            primary: true
+          }
+        }
+      ]
+    }
+    diagnosticsProfile: {
+      bootDiagnostics: {
+        enabled: true
+      }
+    }
+  }
+  tags: {
+    azsecpack: 'nonprod'
+    AzSecPackAutoConfigReady: 'true'
+  }
+}
+resource azureMonitorExtension 'Microsoft.Compute/virtualMachines/extensions@2023-09-01' = {
+  parent: vm
+  name: 'AzureMonitorLinuxAgent'
+  location: location
+  properties: {
+    autoUpgradeMinorVersion: true
+    enableAutomaticUpgrade: true
+    publisher: 'Microsoft.Azure.Monitor'
+    settings: {
+      GCS_AUTO_CONFIG: 'true'
+    }
+    type: 'AzureMonitorLinuxAgent'
+    typeHandlerVersion: '1.0'
+  }
+}

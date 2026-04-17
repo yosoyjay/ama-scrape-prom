@@ -1,0 +1,100 @@
+argetScope = 'resourceGroup'
+
+@description('Resource ID of the Azure Monitor workspace (Microsoft.Monitor/accounts) - NOT Log Analytics workspace')
+param monitorWorkspaceId string = '/subscriptions/62118f5c-be37-400f-9f20-a8b77a2a7877/resourcegroups/jim-rg/providers/microsoft.monitor/accounts/rotorua'
+
+// Data Collection Rule for Slurm metrics
+resource controllerDcr 'Microsoft.Insights/dataCollectionRules@2024-03-11' = {
+  name: 'slurm'
+  location: 'swedencentral'
+  properties: {
+    dataSources: {
+      prometheusForwarder: [
+        {
+          name: 'Slurm-OpenMetrics'
+          streams: ['Microsoft-PrometheusMetrics']
+          #disable-next-line BCP036
+          customVMScrapeConfig: {
+            scrape_configs: [
+              {
+                job_name: 'node-exporter'
+                scrape_interval: '30s'
+                metrics_path: '/metrics'
+                scheme: 'http'
+                static_configs: [
+                  {
+                    targets: ['127.0.0.1:9100']
+                  }
+                ]
+              }
+              {
+                job_name: 'slurm-nodes'
+                scrape_interval: '30s'
+                metrics_path: '/metrics/nodes'
+                scheme: 'http'
+                static_configs: [
+                  {
+                    targets: ['127.0.0.1:6817']
+                  }
+                ]
+              }
+              {
+                job_name: 'slurm-jobs'
+                scrape_interval: '60s'
+                metrics_path: '/metrics/jobs'
+                scheme: 'http'
+                static_configs: [
+                  {
+                    targets: ['127.0.0.1:6817']
+                  }
+                ]
+              }
+              {
+                job_name: 'slurm-partitions'
+                scrape_interval: '30s'
+                metrics_path: '/metrics/partitions'
+                scheme: 'http'
+                static_configs: [
+                  { targets: ['127.0.0.1:6817'] }
+                ]
+              }
+              {
+                job_name: 'slurm-scheduler'
+                scrape_interval: '30s'
+                metrics_path: '/metrics/scheduler'
+                scheme: 'http'
+                static_configs: [
+                  {
+                    targets: ['127.0.0.1:6817']
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+    destinations: {
+      monitoringAccounts: [
+        {
+          accountResourceId: monitorWorkspaceId
+          name: 'MonitoringAccountDestination'
+        }
+      ]
+    }
+    dataFlows: [
+      {
+        streams: [
+          'Microsoft-PrometheusMetrics'
+        ]
+        destinations: [
+          'MonitoringAccountDestination'
+        ]
+      }
+    ]
+  }
+}
+
+// Output the resource ID of the created DCR
+output dataCollectionRuleId string = controllerDcr.id
+output dataCollectionRuleName string = controllerDcr.name

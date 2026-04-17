@@ -1,0 +1,72 @@
+targetScope = 'resourceGroup'
+
+@description('Resource ID of the Azure Monitor workspace (Microsoft.Monitor/accounts)')
+param monitorWorkspaceId string = '/subscriptions/62118f5c-be37-400f-9f20-a8b77a2a7877/resourcegroups/jim-rg/providers/microsoft.monitor/accounts/rotorua'
+
+// Data Collection Rule for Slurm metrics
+resource controllerDcr 'Microsoft.Insights/dataCollectionRules@2024-03-11' = {
+  name: 'slurm'
+  location: 'swedencentral'
+  properties: {
+    dataSources: {
+      prometheusForwarder: [
+        {
+          name: 'Slurm-OpenMetrics'
+          streams: ['Microsoft-PrometheusMetrics']
+          #disable-next-line BCP036
+          customVMScrapeConfig: {
+            scrape_configs: [
+              // node-exporter: system-level metrics
+              {
+                job_name: 'node-exporter'
+                scrape_interval: '30s'
+                metrics_path: '/metrics'
+                scheme: 'http'
+                static_configs: [
+                  {
+                    targets: ['127.0.0.1:9100']
+                  }
+                ]
+              }
+              // Slurm openmetrics: ALL slurm metrics (nodes, jobs, partitions,
+              // scheduler) are served from a single /metrics endpoint on
+              // SlurmctldPort. Sub-paths do not exist in the openmetrics plugin.
+              {
+                job_name: 'slurm'
+                scrape_interval: '30s'
+                metrics_path: '/metrics'
+                scheme: 'http'
+                static_configs: [
+                  {
+                    targets: ['127.0.0.1:6817']
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+    destinations: {
+      monitoringAccounts: [
+        {
+          accountResourceId: monitorWorkspaceId
+          name: 'MonitoringAccountDestination'
+        }
+      ]
+    }
+    dataFlows: [
+      {
+        streams: [
+          'Microsoft-PrometheusMetrics'
+        ]
+        destinations: [
+          'MonitoringAccountDestination'
+        ]
+      }
+    ]
+  }
+}
+
+output dataCollectionRuleId string = controllerDcr.id
+output dataCollectionRuleName string = controllerDcr.name
